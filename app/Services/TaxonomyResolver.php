@@ -15,6 +15,32 @@ class TaxonomyResolver {
  foreach($groups as $kind=>$values){foreach($values as $slug=>$value){DB::table('public_slugs')->insert(compact('kind','slug','value'));}}
  });
  }
+ public const DIRECTORIES = ['roles'=>'roles', 'locations'=>'locations', 'collections'=>'markets', 'tags'=>'tags', 'departments'=>'departments', 'employment-types'=>'employment'];
+
+ public static function path(string $kind, string $slug): string
+ {
+     return match ($kind) {
+         'tags', 'remote' => $slug.'-jobs',
+         'markets' => 'collections/'.$slug,
+         'roles', 'locations' => $kind.'/'.$slug,
+         default => 'jobs/'.$slug,
+     };
+ }
+
+ public function terms(string $kind)
+ {
+     $terms = DB::table('public_slugs as s')->where('s.kind', $kind);
+     if (in_array($kind, ['roles', 'locations', 'departments'], true)) {
+         return $terms->join($kind.' as t', 't.id', '=', 's.owner_id')
+             ->select(['s.slug', 's.kind', 't.name']);
+     }
+
+     if ($kind === 'employment') {
+         return $terms->select(['s.slug', 's.kind'])->selectRaw("initcap(replace(s.value, '_', ' ')) as name");
+     }
+
+     return $terms->select(['s.slug', 's.kind', 's.value as name']);
+ }
  public function find(string $slug){return DB::table('public_slugs')->where('slug',$slug)->first();}
  public function isLocation($term):bool{return in_array($term->kind,['locations','remote'],true);}
  public function constrain($q,$term):void {

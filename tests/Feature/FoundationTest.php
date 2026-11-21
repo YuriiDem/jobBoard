@@ -8,6 +8,7 @@ use Filament\Pages\Auth\Login;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\URL;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -47,5 +48,24 @@ class FoundationTest extends TestCase
     public function test_regular_account_cannot_access_the_panel(): void
     {
         $this->actingAs(User::factory()->create())->get('/admin')->assertForbidden();
+        $this->get('/admin/login')->assertForbidden();
+        $this->get('/')->assertDontSee('href="http://localhost/admin"', false)->assertDontSee('Back Office');
+    }
+
+    public function test_back_office_entry_is_private_and_expires(): void
+    {
+        $this->get('/')->assertOk()->assertDontSee('Admin sign in')->assertDontSee('Back Office');
+        $this->get('/admin')->assertNotFound();
+        $this->get('/admin/jobs')->assertNotFound();
+        $this->get('/admin/login')->assertNotFound();
+        $url = URL::temporarySignedRoute('filament.admin.auth.login', now()->addMinutes(15));
+        $this->get($url.'x')->assertNotFound();
+        $this->get($url)->assertRedirect('/admin/login');
+        $this->get('/admin/login')->assertOk();
+        $this->get('/admin')->assertNotFound();
+        $this->travel(16)->minutes();
+        $this->get('/admin/login')->assertNotFound();
+        $this->get($url)->assertNotFound();
+        $this->travelBack();
     }
 }

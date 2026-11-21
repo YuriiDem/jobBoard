@@ -48,5 +48,6 @@ class JobObserver
     public static function forgetSalary(): void
     {
         Cache::forget('salary.guide.'.config('jobboard.default_currency'));
+        Cache::forget('salary.band.'.config('jobboard.default_currency'));
     }
 }

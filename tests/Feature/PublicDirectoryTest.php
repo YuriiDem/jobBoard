@@ -41,14 +41,24 @@ class PublicDirectoryTest extends TestCase
         $this->get('/jobs/demo-internship-opening')->assertOk()->assertSee('jobs/internships/remote');
     }
 
+    public function test_multiselect_filters_share_a_normalized_url_and_intersect_across_groups(): void
+    {
+        Job::where('employment_type', 'internship')->update(['seniority_level' => 'junior']);
+        Job::where('employment_type', 'working_student')->update(['seniority_level' => 'senior']);
+        $url = '/jobs?employment=internship%2Cworking_student&level=junior';
+        $this->get('/jobs?level=junior&employment[]=working_student&employment[]=internship&min_salary=&tag=')->assertRedirect($url);
+        $this->get($url)->assertOk()->assertSee('Startup Intern')->assertDontSee('Startup Student Associate');
+        $this->get('/jobs?level[][]=junior')->assertNotFound();
+    }
+
     public function test_job_lifecycle_structured_data_and_counters(): void
     {
         $job = Job::firstOrFail();
         $location = DB::table('locations')->insertGetId(['name' => 'London', 'slug' => 'london', 'type' => 'city', 'country_code' => 'GB']);
         $job->update(['primary_location_id' => $location, 'workplace_type' => 'onsite']);
         $path = '/jobs/'.$job->slug;
-        $this->get('/locations/london')->assertRedirect('/jobs/london');
-        $this->get('/jobs/london')->assertSee($job->title);
+        $this->get('/jobs/london')->assertRedirect('/locations/london')->assertStatus(301);
+        $this->get('/locations/london')->assertSee($job->title);
         $this->get($path)->assertOk()->assertSee('application/ld+json');
         $this->get($path.'/apply')->assertRedirect($job->apply_url)->assertHeader('X-Robots-Tag', 'noindex, nofollow');
         $this->assertDatabaseHas('job_metrics', ['job_id' => $job->id, 'views_count' => 1, 'apply_clicks_count' => 1]);
@@ -76,11 +86,30 @@ class PublicDirectoryTest extends TestCase
         Job::firstOrFail()->update(['slug' => 'internships']);
     }
 
+    public function test_search_landings_and_sitemap_use_one_address_per_term(): void
+    {
+        config(['jobboard.markets' => ['Cryptocurrency']]);
+        app(TaxonomyResolver::class)->sync();
+        $this->get('/tags')->assertSee('href="http://localhost/ocean-jobs"', false);
+        $this->get('/roles')->assertSee('/roles/demo-associate');
+        $this->get('/jobs/ocean?page=2')->assertRedirect('/ocean-jobs?page=2')->assertStatus(301);
+        $this->get('/ocean-jobs?page=2')->assertOk()->assertSee('rel="canonical" href="http://localhost/ocean-jobs?page=2"', false);
+        $this->get('/remote-jobs')->assertOk()->assertSee('content="index, follow"', false);
+        $this->get('/roles/demo-associate')->assertOk()->assertSee('Startup Specialist');
+        $this->get('/collections/cryptocurrency')->assertOk()->assertSee('noindex, follow');
+        $this->get('/some-unknown-jobs')->assertNotFound();
+        $this->get('/roles/ocean')->assertNotFound();
+        $this->get('/sitemaps/c.xml')->assertSee('/remote-jobs')->assertSee('/ocean-jobs')
+            ->assertDontSee('/jobs/ocean</loc>', false)->assertDontSee('/collections/cryptocurrency');
+        \App\Models\Company::firstOrFail()->update(['markets' => ['Cryptocurrency']]);
+        $this->get('/collections/cryptocurrency')->assertOk()->assertSee('Startup Specialist')->assertSee('content="index, follow"', false);
+    }
+
     public function test_company_salary_and_crawler_routes(): void
     {
         $this->get('/companies')->assertOk()->assertSee('companies/demo-studio');
         $this->get('/companies/demo-studio')->assertOk()->assertSee('Startup Specialist');
-        $this->get('/salary-guide')->assertOk()->assertSee('USD 50,000');
+        $this->get('/salary-guide')->assertOk()->assertSee(config('jobboard.default_currency').' 50,000');
         $this->get('/robots.txt')->assertOk()->assertSee('Disallow: /*?q=', false);
         $this->get('/llms.txt')->assertOk()->assertSee(config('jobboard.seo.llms_txt_intro'));
         $this->get('/sitemap.xml')->assertOk()->assertSee('sitemaps/a-0.xml');

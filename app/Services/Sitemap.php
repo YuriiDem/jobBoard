@@ -36,6 +36,11 @@ class Sitemap
     {
         $taxonomy = $this->taxonomy;
         yield from ['', 'companies', 'salary-guide'];
+        foreach (TaxonomyResolver::DIRECTORIES as $directory => $kind) {
+            if ($taxonomy->terms($kind)->exists()) {
+                yield $directory;
+            }
+        }
         if (Job::active()->exists()) {
             yield 'jobs';
         }
@@ -43,7 +48,7 @@ class Sitemap
             $query = Job::active();
             $taxonomy->constrain($query, $term);
             if ($query->exists()) {
-                yield 'jobs/'.$term->slug;
+                yield TaxonomyResolver::path($term->kind, $term->slug);
             }
         }
         foreach (array_unique(config('jobboard.approved_pairs')) as $pair) {

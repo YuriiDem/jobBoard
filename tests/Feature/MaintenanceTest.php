@@ -33,14 +33,14 @@ class MaintenanceTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         $jobs = Job::orderBy('id')->get();
         $jobs[0]->update(['status' => 'published', 'expires_at' => now()->subMinute()]);
-        $jobs[1]->update(['status' => 'published', 'salary_period' => 'year', 'salary_currency' => 'USD', 'salary_min' => 90000]);
-        Cache::put('salary.guide.USD', 100);
+        $jobs[1]->update(['status' => 'published', 'published_at' => now()->subDay(), 'salary_period' => 'year', 'salary_currency' => 'USD', 'salary_min' => 90000]);
+        Cache::put('salary.guide.'.config('jobboard.default_currency'), 100);
         foreach ([1, 2] as $run) {
             $this->artisan('jobboard:expire')->assertSuccessful();
             $this->artisan('jobboard:snapshot')->assertSuccessful();
             $this->artisan('jobboard:sitemap')->assertSuccessful();
         }
-        $this->assertNull(Cache::get('salary.guide.USD'));
+        $this->assertNull(Cache::get('salary.guide.'.config('jobboard.default_currency')));
         $this->assertSame('expired', $jobs[0]->fresh()->status);
         $stat = DailyStat::whereDate('date', today())->sole();
         $this->assertEquals([1, 1, 90000], [$stat->total_active_jobs, $stat->remote_jobs_count, $stat->median_salary_usd]);
@@ -62,15 +62,15 @@ class MaintenanceTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         config(['queue.default' => 'database', 'queue.connections.database.table' => 'queue_jobs', 'jobboard.seo.credentials' => __FILE__]);
         $job = Job::firstOrFail();
-        Cache::put('salary.guide.USD', 10);
+        Cache::put('salary.guide.'.config('jobboard.default_currency'), 10);
         DB::beginTransaction();
         $job->update(['status' => 'published']);
         $this->assertDatabaseCount('queue_jobs', 0);
         DB::rollBack();
-        $this->assertSame(10, Cache::get('salary.guide.USD'));
+        $this->assertSame(10, Cache::get('salary.guide.'.config('jobboard.default_currency')));
         $this->assertDatabaseCount('queue_jobs', 0);
         DB::transaction(fn () => $job->refresh()->update(['status' => 'published']));
-        $this->assertNull(Cache::get('salary.guide.USD'));
+        $this->assertNull(Cache::get('salary.guide.'.config('jobboard.default_currency')));
         $this->assertDatabaseCount('queue_jobs', 1);
         config(['jobboard.seo.credentials' => null]);
         $job->delete();

@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Http\Middleware\BackOfficeAccess;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -26,6 +27,7 @@ class AdminPanelProvider extends PanelProvider
             ->default()
             ->databaseTransactions()
             ->id('admin')
+            ->plugin(\Pboivin\FilamentPeek\FilamentPeekPlugin::make())
             ->path('admin')
             ->login()
             ->colors([
@@ -52,6 +54,7 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            ->middleware([BackOfficeAccess::class], isPersistent: true)
             ->authMiddleware([
                 Authenticate::class,
             ]);
